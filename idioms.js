@@ -1,4 +1,5 @@
 import { MOE_IDIOM_ROWS } from "./moe-idioms.js";
+import { MOE_PHRASE_ROWS } from "./moe-phrases.js";
 
 const CORE_IDIOMS = [
   { text: "一心一意", sounds: "yi4 xin1 yi2 yi4" },
@@ -202,25 +203,45 @@ function toToneKey(syllable) {
   return base ? `${base}${tone}` : null;
 }
 
-function fromMoeRow([text, pinyin]) {
+function fromMoeRow([text, pinyin], kind, source) {
   const sounds = pinyin
     .split("（")[0]
     .trim()
     .split(/\s+/)
     .map(toToneKey)
     .filter(Boolean);
-  return sounds.length === 4 ? { text, sounds } : null;
+  return sounds.length === 4 ? { text, sounds, kind, source } : null;
 }
 
 const idiomsByText = new Map();
 for (const row of MOE_IDIOM_ROWS) {
-  const idiom = fromMoeRow(row);
+  const idiom = fromMoeRow(row, "idiom", "idioms");
   if (idiom) idiomsByText.set(idiom.text, idiom);
 }
 for (const idiom of CORE_IDIOMS) {
-  if (!idiomsByText.has(idiom.text)) idiomsByText.set(idiom.text, idiom);
+  if (!idiomsByText.has(idiom.text)) idiomsByText.set(idiom.text, { ...idiom, kind: "idiom", source: "core" });
+}
+for (const row of MOE_PHRASE_ROWS) {
+  if (idiomsByText.has(row[0])) continue;
+  const phrase = fromMoeRow(row, "phrase", row[2]);
+  if (phrase) idiomsByText.set(phrase.text, phrase);
+}
+
+const manualPhrases = [
+  { text: "搜盡枯腸", sounds: ["sou1", "jin4", "ku1", "chang2"], kind: "phrase", source: "core" }
+];
+for (const phrase of manualPhrases) {
+  if (!idiomsByText.has(phrase.text)) idiomsByText.set(phrase.text, phrase);
 }
 
 export const IDIOMS = [...idiomsByText.values()];
 
-export const STARTERS = ["一心一意", "人山人海", "馬到成功", "千言萬語", "道聽塗說"];
+const starterCounts = new Map();
+for (const idiom of IDIOMS) {
+  if (idiom.kind !== "idiom") continue;
+  starterCounts.set(idiom.text[0], (starterCounts.get(idiom.text[0]) ?? 0) + 1);
+}
+
+export const STARTERS = IDIOMS
+  .filter((idiom) => idiom.kind === "idiom" && (starterCounts.get(idiom.text.at(-1)) ?? 0) >= 3)
+  .map((idiom) => idiom.text);

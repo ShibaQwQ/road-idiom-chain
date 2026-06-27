@@ -21,10 +21,41 @@ export function getSkipConfirmation(values) {
   return null;
 }
 
+export function getAnswerConfirmation(values) {
+  const normalized = values.map(normalizeSpeech);
+  if (normalized.some((value) => /^(確定|确定|是|是的|對|没錯|沒錯)$/.test(value))) return "confirm";
+  if (normalized.some((value) => /^(不是|不對|不对|下一個|下一个|取消)$/.test(value))) return "reject";
+  return null;
+}
+
 export function findIdiom(value, idioms = IDIOMS) {
   const normalized = normalizeSpeech(value);
   return idioms.find((idiom) => idiom.text === normalized)
     || idioms.find((idiom) => normalized.includes(idiom.text));
+}
+
+const characterSounds = new Map();
+for (const idiom of IDIOMS) {
+  [...idiom.text].forEach((character, index) => {
+    if (!characterSounds.has(character)) characterSounds.set(character, new Set());
+    characterSounds.get(character).add(idiom.sounds[index]);
+  });
+}
+
+export function findPhoneticMatches(value, idioms = IDIOMS) {
+  const characters = normalizeSpeech(value).match(/[\u3400-\u9fff]/g) ?? [];
+  if (characters.length !== 4) return [];
+  const soundOptions = characters.map((character) => characterSounds.get(character) ?? new Set());
+  const evaluated = idioms.map((idiom) => {
+    const soundMismatches = idiom.sounds.reduce((count, sound, index) => count + (soundOptions[index].has(sound) ? 0 : 1), 0);
+    const characterMatches = [...idiom.text].reduce((count, character, index) => count + (characters[index] === character ? 1 : 0), 0);
+    return { idiom, soundMismatches, characterMatches };
+  });
+  const exactSound = evaluated.filter((item) => item.soundMismatches === 0).map((item) => item.idiom);
+  if (exactSound.length) return exactSound;
+  return evaluated
+    .filter((item) => item.soundMismatches <= 1 && item.characterMatches >= 3)
+    .map((item) => item.idiom);
 }
 
 export function scoreAnswer(previous, candidate, rule) {
@@ -41,6 +72,11 @@ export function scoreAnswer(previous, candidate, rule) {
   if (rule === "sound") {
     const valid = firstCharacterMatches || firstSoundMatches;
     return { valid, points: valid ? 1 : 0, reason: firstCharacterMatches ? "同字接龍" : firstSoundMatches ? "同音接龍" : "字首不同音" };
+  }
+
+  if (candidate.kind === "phrase") {
+    const matched = [...candidate.text].some((character, index) => character === targetCharacter || candidate.sounds[index] === targetSound);
+    return { valid: true, points: matched ? 1 : 0, reason: matched ? "四字詞語接到目標字音" : "沒有接到目標音" };
   }
 
   if (firstCharacterMatches) return { valid: true, points: 3, reason: "同字在字首" };
@@ -65,7 +101,8 @@ function replyCount(candidate, rule, used, idioms) {
 }
 
 export function chooseAiReply(previous, rule, difficulty, used, idioms = IDIOMS, random = Math.random) {
-  const candidates = availableReplies(previous, rule, used, idioms);
+  const aiIdioms = idioms.filter((idiom) => idiom.kind !== "phrase");
+  const candidates = availableReplies(previous, rule, used, aiIdioms);
   if (!candidates.length) return null;
 
   const scoredCandidates = candidates.map((idiom) => ({ idiom, points: scoreAnswer(previous, idiom, rule).points }));
@@ -74,7 +111,7 @@ export function chooseAiReply(previous, rule, difficulty, used, idioms = IDIOMS,
   const ranked = strategicCandidates.map(({ idiom, points }) => ({
     idiom,
     points,
-    exits: replyCount(idiom, rule, used, idioms)
+    exits: replyCount(idiom, rule, used, aiIdioms)
   }));
 
   if (difficulty === "easy") {

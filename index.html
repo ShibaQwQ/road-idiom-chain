@@ -28,7 +28,7 @@
           <p class="eyebrow">乘客限定 · 說出答案就能玩</p>
           <h1>眼睛看風景，<br /><em>成語交給耳朵。</em></h1>
           <p>選好玩法後按一次開始。系統會念題目、聽答案、報分數。</p>
-          <p class="data-credit">成語資料採用中華民國教育部<a href="https://dict.idioms.moe.edu.tw/" target="_blank" rel="noreferrer">《成語典》</a>（2026-03-24 版）</p>
+          <p class="data-credit">詞語資料採用中華民國教育部<a href="https://dict.idioms.moe.edu.tw/" target="_blank" rel="noreferrer">《成語典》</a>、<a href="https://dict.revised.moe.edu.tw/" target="_blank" rel="noreferrer">《重編國語辭典修訂本》</a>與<a href="https://dict.concised.moe.edu.tw/" target="_blank" rel="noreferrer">《國語辭典簡編本》</a></p>
         </div>
 
         <form id="setupForm" class="setup-form">
@@ -55,6 +55,14 @@
                 <input type="radio" name="rule" value="score" />
                 <span><strong>位置積分賽</strong><small>字首 3／2 分，其他位置 1 分</small></span>
               </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>怎麼開局？</legend>
+            <div class="segmented">
+              <label><input type="radio" name="openingMode" value="random" checked /><span>系統隨機</span></label>
+              <label><input type="radio" name="openingMode" value="player" /><span>玩家出題</span></label>
             </div>
           </fieldset>
 
@@ -99,14 +107,14 @@
           <div id="voicePulse" class="voice-pulse" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
           <button id="listenButton" class="listen-button" type="button">
             <span class="mic-icon" aria-hidden="true"></span>
-            <span id="listenLabel">說出成語</span>
+            <span id="listenLabel">說出答案</span>
           </button>
           <p id="gameStatus" class="game-status" role="status" aria-live="polite">準備開始</p>
         </div>
 
         <form id="manualForm" class="manual-form">
           <label for="manualInput">語音沒聽清楚？也可以輸入</label>
-          <div><input id="manualInput" inputmode="text" autocomplete="off" maxlength="12" placeholder="輸入四字成語" /><button type="submit">送出</button></div>
+          <div><input id="manualInput" inputmode="text" autocomplete="off" maxlength="12" placeholder="輸入成語或四字詞" /><button type="submit">送出</button></div>
         </form>
 
         <details class="history-panel">

@@ -1,5 +1,5 @@
 import { IDIOMS, STARTERS } from "./idioms.js";
-import { RULES, chooseAiReply, createPlayers, findIdiom, getSkipConfirmation, isSkipRequest, scoreAnswer } from "./game.js";
+import { RULES, chooseAiReply, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, scoreAnswer } from "./game.js";
 
 const $ = (selector) => document.querySelector(selector);
 const elements = {
@@ -12,6 +12,7 @@ const elements = {
   networkBadge: $("#networkBadge"),
   scoreboard: $("#scoreboard"),
   turnName: $("#turnName"),
+  targetLabel: $("#targetLabel"),
   targetCharacter: $("#targetCharacter"),
   targetSound: $("#targetSound"),
   listenButton: $("#listenButton"),
@@ -39,7 +40,9 @@ const state = {
   listening: false,
   gameActive: false,
   online: null,
-  pendingSkipConfirmation: false
+  pendingSkipConfirmation: false,
+  pendingAnswerCandidates: [],
+  awaitingOpening: false
 };
 
 function currentPlayer() {
@@ -104,13 +107,24 @@ function setupRecognition() {
     state.listening = true;
     elements.voiceZone.classList.add("listening");
     elements.listenLabel.textContent = "正在聽";
-    setStatus(state.pendingSkipConfirmation ? "請說確定或取消" : "請說出四字成語");
+    const instruction = state.pendingSkipConfirmation
+      ? "請說確定或取消"
+      : state.pendingAnswerCandidates.length
+        ? "請說確定或不是"
+        : state.awaitingOpening
+          ? "請說一個成語或四字詞語開局"
+          : "請說出四字成語或詞語";
+    setStatus(instruction);
   });
 
   recognition.addEventListener("result", (event) => {
     const alternatives = Array.from(event.results[0], (result) => result.transcript);
     if (state.pendingSkipConfirmation) {
       handleSkipConfirmation(alternatives);
+      return;
+    }
+    if (state.pendingAnswerCandidates.length) {
+      handleAnswerConfirmation(alternatives);
       return;
     }
 
@@ -126,9 +140,7 @@ function setupRecognition() {
       return;
     }
 
-    const answer = alternatives.map((value) => findIdiom(value)).find(Boolean);
-    if (answer) submitAnswer(answer.text);
-    else rejectAnswer(`聽到「${alternatives[0]}」，但成語庫裡找不到`);
+    processAnswerAlternatives(alternatives);
   });
 
   recognition.addEventListener("error", (event) => {
@@ -145,7 +157,7 @@ function setupRecognition() {
   recognition.addEventListener("end", () => {
     state.listening = false;
     elements.voiceZone.classList.remove("listening");
-    elements.listenLabel.textContent = "說出成語";
+    elements.listenLabel.textContent = "說出答案";
   });
 
   state.recognition = recognition;
@@ -188,11 +200,77 @@ function speak(message, onEnd) {
 }
 
 function promptCurrentPlayer(autoListen = true) {
-  const target = state.current.text.at(-1);
   const player = currentPlayer();
+  if (state.awaitingOpening) {
+    const message = `${player.name}，請隨意說一個成語或四字詞語開局，第一題不計分`;
+    setStatus(message);
+    speak(message, () => autoListen && startListening());
+    return;
+  }
+  const target = state.current.text.at(-1);
   const instruction = state.config.rule === "exact" ? `請用「${target}」字開頭` : state.config.rule === "sound" ? `請用「${target}」或同音字開頭` : `請找含有「${target}」或同音字的成語`;
   setStatus(`${player.name}，${instruction}`);
   speak(`${player.name}，${instruction}`, () => autoListen && startListening());
+}
+
+function getPlayableCandidates(candidates) {
+  const unique = [...new Map(candidates.map((candidate) => [candidate.text, candidate])).values()]
+    .filter((candidate) => !state.used.has(candidate.text));
+  if (state.awaitingOpening) return unique;
+  const valid = unique.filter((candidate) => scoreAnswer(state.current, candidate, state.config.rule).valid);
+  if (state.config.rule !== "score") return valid;
+  const scoring = valid.filter((candidate) => scoreAnswer(state.current, candidate, state.config.rule).points > 0);
+  return scoring.length ? scoring : valid;
+}
+
+function processAnswerAlternatives(alternatives) {
+  const answer = alternatives.map((value) => findIdiom(value)).find(Boolean);
+  if (answer) {
+    submitAnswer(answer);
+    return;
+  }
+
+  const phoneticCandidates = getPlayableCandidates(alternatives.flatMap((value) => findPhoneticMatches(value)));
+  if (phoneticCandidates.length === 1) submitAnswer(phoneticCandidates[0]);
+  else if (phoneticCandidates.length > 1) requestAnswerConfirmation(phoneticCandidates);
+  else rejectAnswer(`聽到「${alternatives[0]}」，但詞庫裡找不到這個四字詞`);
+}
+
+function requestAnswerConfirmation(candidates) {
+  state.pendingAnswerCandidates = candidates.slice(0, 5);
+  askCurrentAnswerCandidate();
+}
+
+function askCurrentAnswerCandidate() {
+  const candidate = state.pendingAnswerCandidates[0];
+  if (!candidate) {
+    state.pendingAnswerCandidates = [];
+    rejectAnswer("沒有找到符合發音的四字詞");
+    return;
+  }
+  const message = `你說的是${candidate.text}嗎？請說確定或不是`;
+  setStatus(message);
+  speak(message, startListening);
+}
+
+function handleAnswerConfirmation(alternatives) {
+  const confirmation = getAnswerConfirmation(alternatives);
+  if (confirmation === "confirm") {
+    const candidate = state.pendingAnswerCandidates[0];
+    state.pendingAnswerCandidates = [];
+    submitAnswer(candidate);
+    return;
+  }
+  if (confirmation === "reject") {
+    state.pendingAnswerCandidates.shift();
+    if (state.pendingAnswerCandidates.length) askCurrentAnswerCandidate();
+    else {
+      state.pendingAnswerCandidates = [];
+      speak("已取消這些候選，請重新回答", startListening);
+    }
+    return;
+  }
+  speak("請說確定或不是", startListening);
 }
 
 function handleVoiceCommand(command) {
@@ -257,11 +335,16 @@ function submitAnswer(value) {
   stopListening();
   const idiom = typeof value === "string" ? findIdiom(value) : value;
   if (!idiom) {
-    rejectAnswer("成語庫裡找不到這個答案");
+    rejectAnswer("詞庫裡找不到這個四字詞");
     return;
   }
   if (state.used.has(idiom.text)) {
     rejectAnswer(`${idiom.text}已經用過了`);
+    return;
+  }
+
+  if (state.awaitingOpening) {
+    acceptOpening(idiom);
     return;
   }
 
@@ -282,9 +365,24 @@ function acceptAnswer(idiom, result) {
   state.turnIndex = (state.turnIndex + 1) % state.players.length;
   renderGame();
 
-  const report = `${player.name}回答${idiom.text}，${result.reason}，得到${result.points}分`;
+  const answerType = idiom.kind === "phrase" ? "四字詞語" : "成語";
+  const report = `${player.name}回答${answerType}${idiom.text}，${result.reason}，得到${result.points}分`;
   setStatus(report, result.points ? "success" : "");
   speak(report, () => {
+    if (currentPlayer().ai) runAiTurn();
+    else promptCurrentPlayer(true);
+  });
+}
+
+function acceptOpening(idiom) {
+  const player = currentPlayer();
+  state.awaitingOpening = false;
+  state.used.add(idiom.text);
+  state.current = idiom;
+  state.history.push({ text: idiom.text, player: `${player.name}出題`, points: null, reason: "開局" });
+  state.turnIndex = (state.turnIndex + 1) % state.players.length;
+  renderGame();
+  speak(`${player.name}用${idiom.text}開局`, () => {
     if (currentPlayer().ai) runAiTurn();
     else promptCurrentPlayer(true);
   });
@@ -307,8 +405,9 @@ function runAiTurn() {
 function renderGame() {
   const player = currentPlayer();
   elements.turnName.textContent = player.name;
-  elements.targetCharacter.textContent = state.current.text.at(-1);
-  elements.targetSound.textContent = state.config.rule === "exact" ? "同一字放在字首" : state.config.rule === "sound" ? "同音同調也可以" : "字首最高 3 分";
+  elements.targetLabel.textContent = state.awaitingOpening ? "請說開局詞" : "請接這個字";
+  elements.targetCharacter.textContent = state.awaitingOpening ? "自選" : state.current.text.at(-1);
+  elements.targetSound.textContent = state.awaitingOpening ? "第一題不計分" : state.config.rule === "exact" ? "同一字放在字首" : state.config.rule === "sound" ? "同音同調也可以" : "字首最高 3 分";
   elements.listenButton.disabled = player.ai;
 
   elements.scoreboard.replaceChildren(...state.players.map((item, index) => {
@@ -339,6 +438,7 @@ function startGame(event) {
     mode,
     rule: form.get("rule"),
     difficulty: form.get("difficulty"),
+    openingMode: form.get("openingMode"),
     playerCount: Number(elements.playerCount.value)
   };
   state.players = createPlayers(mode, state.config.playerCount);
@@ -347,11 +447,17 @@ function startGame(event) {
   state.history = [];
   state.gameActive = true;
   state.pendingSkipConfirmation = false;
+  state.pendingAnswerCandidates = [];
+  state.awaitingOpening = state.config.openingMode === "player";
 
-  const starterText = STARTERS[Math.floor(Math.random() * STARTERS.length)];
-  state.current = IDIOMS.find((idiom) => idiom.text === starterText);
-  state.used.add(state.current.text);
-  state.history.push({ text: state.current.text, player: "起點", points: null, reason: "起點" });
+  if (state.awaitingOpening) {
+    state.current = null;
+  } else {
+    const starterText = STARTERS[Math.floor(Math.random() * STARTERS.length)];
+    state.current = IDIOMS.find((idiom) => idiom.text === starterText);
+    state.used.add(state.current.text);
+    state.history.push({ text: state.current.text, player: "隨機起點", points: null, reason: "起點" });
+  }
 
   elements.setupScreen.hidden = true;
   elements.gameScreen.hidden = false;
@@ -363,6 +469,7 @@ function finishGame(reason = "本局結束") {
   if (!state.gameActive) return;
   state.gameActive = false;
   state.pendingSkipConfirmation = false;
+  state.pendingAnswerCandidates = [];
   stopListening();
   window.speechSynthesis?.cancel();
   const highest = Math.max(...state.players.map((player) => player.score));
@@ -383,6 +490,7 @@ function finishGame(reason = "本局結束") {
 function returnToSetup() {
   state.gameActive = false;
   state.pendingSkipConfirmation = false;
+  state.pendingAnswerCandidates = [];
   stopListening();
   window.speechSynthesis?.cancel();
   if (elements.resultDialog.open) elements.resultDialog.close();
@@ -399,10 +507,12 @@ elements.manualForm.addEventListener("submit", (event) => {
   elements.manualInput.value = "";
   if (state.pendingSkipConfirmation) {
     handleSkipConfirmation([value]);
+  } else if (state.pendingAnswerCandidates.length) {
+    handleAnswerConfirmation([value]);
   } else if (state.config.mode === "multi" && isSkipRequest(value)) {
     requestSkipTurn();
   } else {
-    submitAnswer(value);
+    processAnswerAlternatives([value]);
   }
 });
 elements.endGame.addEventListener("click", () => finishGame());

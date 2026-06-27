@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
-import { IDIOMS } from "../idioms.js";
-import { chooseAiReply, createPlayers, findIdiom, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
+import { IDIOMS, STARTERS } from "../idioms.js";
+import { chooseAiReply, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
 
 const idiom = (text) => IDIOMS.find((item) => item.text === text);
 
@@ -27,9 +27,28 @@ test("語音答案可移除引導詞與標點", () => {
 });
 
 test("完整成語庫包含指定條目與正確讀音", () => {
-  assert.ok(IDIOMS.length > 5000);
+  assert.ok(IDIOMS.length > 37000);
   assert.deepEqual(idiom("美輪美奐").sounds, ["mei3", "lun2", "mei3", "huan4"]);
   assert.deepEqual(idiom("美不勝收").sounds, ["mei3", "bu4", "sheng1", "shou1"]);
+});
+
+test("教育部一般辭典補充四字詞，位置積分最高一分", () => {
+  const examples = ["食髓知味", "說文解字", "共體時艱", "烈日當空", "索盡枯腸"];
+  for (const text of examples) assert.ok(idiom(text), `${text} 應存在`);
+  assert.equal(idiom("說文解字").kind, "phrase");
+  assert.equal(scoreAnswer(idiom("道聽塗說"), idiom("說文解字"), "score").points, 1);
+});
+
+test("語音同音錯字能找到正確四字詞候選", () => {
+  assert.ok(findPhoneticMatches("十指大動").some((item) => item.text === "食指大動"));
+  assert.ok(findPhoneticMatches("供體時艱").some((item) => item.text === "共體時艱"));
+  assert.equal(getAnswerConfirmation(["確定"]), "confirm");
+  assert.equal(getAnswerConfirmation(["不是"]), "reject");
+});
+
+test("隨機開局候選不再固定為少數幾個詞", () => {
+  assert.ok(STARTERS.length > 1000);
+  assert.ok(new Set(STARTERS.map((text) => text.at(-1))).size > 100);
 });
 
 test("多人放棄必須二次確認，也可以取消", () => {
@@ -67,6 +86,7 @@ test("PWA 圖示與離線快取設定完整，連線檢查檔不進快取", asyn
   ]);
   assert.match(serviceWorker, /icons\/apple-touch-icon\.png/);
   assert.match(serviceWorker, /moe-idioms\.js/);
+  assert.match(serviceWorker, /moe-phrases\.js/);
   assert.match(serviceWorker, /fetch\(event\.request\)[\s\S]*?\.catch/);
   assert.doesNotMatch(serviceWorker.match(/APP_FILES = \[[\s\S]*?\];/)?.[0] ?? "", /online-check\.txt/);
 });

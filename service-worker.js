@@ -1,4 +1,4 @@
-const CACHE_NAME = "road-idiom-chain-v5";
+const CACHE_NAME = "road-idiom-chain-v7";
 const APP_FILES = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const APP_FILES = [
   "./game.js",
   "./idioms.js",
   "./moe-idioms.js",
+  "./moe-phrases.js",
   "./manifest.webmanifest",
   "./icons/app-icon.svg",
   "./icons/app-icon-192.png",
