@@ -65,19 +65,6 @@ export function findPhoneticMatches(value, idioms = IDIOMS) {
     .map((item) => item.idiom);
 }
 
-export function createFreePhrase(value) {
-  const text = extractFourCharacters(value);
-  if (!text) return null;
-  const soundOptions = [...text].map((character) => [...(characterSounds.get(character) ?? [])]);
-  return {
-    text,
-    sounds: soundOptions.map((options) => options[0] ?? null),
-    soundOptions,
-    kind: "phrase",
-    source: "free"
-  };
-}
-
 function soundsAt(entry, index) {
   const options = entry.soundOptions?.[index] ?? [];
   const primary = entry.sounds?.[index];

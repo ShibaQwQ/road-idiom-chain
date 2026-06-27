@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { IDIOMS, STARTERS, STARTER_GROUPS, chooseRandomStarter } from "../idioms.js";
-import { chooseAiReply, createFreePhrase, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
+import { chooseAiReply, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
 
 const idiom = (text) => IDIOMS.find((item) => item.text === text);
 
@@ -39,14 +39,9 @@ test("教育部一般辭典補充四字詞，位置積分最高一分", () => {
   assert.equal(scoreAnswer(idiom("道聽塗說"), idiom("說文解字"), "score").points, 1);
 });
 
-test("詞庫外的任意四個中文字也能接龍且最高一分", () => {
-  const freePhrase = createFreePhrase("說話真好");
-  assert.equal(freePhrase.text, "說話真好");
-  assert.equal(freePhrase.source, "free");
-  assert.equal(scoreAnswer(idiom("道聽塗說"), freePhrase, "score").points, 1);
-  assert.equal(scoreAnswer(idiom("道聽塗說"), freePhrase, "exact").valid, true);
-  assert.equal(scoreAnswer(idiom("道聽塗說"), createFreePhrase("晴空萬里"), "score").valid, false);
-  assert.equal(createFreePhrase("三個字"), null);
+test("擴充詞庫接受常用四字詞，拒絕隨意拼湊的四個字", () => {
+  for (const text of ["說文解字", "四海一家", "天下為公"]) assert.ok(findIdiom(text));
+  for (const text of ["打開刪除", "除二畢竟", "義工畢竟", "竟敢如此", "此地無名"]) assert.equal(findIdiom(text), undefined);
 });
 
 test("語音同音錯字能找到正確四字詞候選", () => {
@@ -106,9 +101,9 @@ test("PWA 圖示與離線快取設定完整，連線檢查檔不進快取", asyn
   assert.doesNotMatch(serviceWorker.match(/APP_FILES = \[[\s\S]*?\];/)?.[0] ?? "", /online-check\.txt/);
 });
 
-test("語音提示允許玩家在朗讀結束前開始回答", async () => {
+test("語音提示採短句朗讀完再收音，避免系統聽到自己", async () => {
   const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
-  assert.match(app, /speechstart[\s\S]*speechSynthesis\?\.cancel/);
-  assert.match(app, /startListening\(\{ preserveSpeech: true \}\)/);
-  assert.match(app, /resumeListeningAfterEnd[\s\S]*startListening\(options\)/);
+  assert.match(app, /function speakThenListen\(message\)\s*{\s*speak\(message, startListening\);/);
+  assert.match(app, /請出題/);
+  assert.doesNotMatch(app, /preserveSpeech|createFreePhrase/);
 });
