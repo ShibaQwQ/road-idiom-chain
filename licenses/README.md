@@ -26,3 +26,14 @@
 - 完整使用說明：`MOE-revised-usage.pdf`
 
 遊戲只重製兩套辭典中四字詞目的「字詞名」與「漢語拼音」，不修改原始內容。`moe-phrases.js` 是供程式搜尋的格式轉換結果。
+
+## 教育部《國語小字典》
+
+中華民國教育部（Ministry of Education, R.O.C.）。《國語小字典》（版本編號：`dict_mini_2019_20260324`）。
+
+- 原始資料：https://dict.mini.moe.edu.tw/
+- 下載頁：https://language.moe.gov.tw/001/Upload/Files/site_content/M0001/respub/dict_mini_download.html
+- 授權：CC BY-ND 3.0 TW
+- 完整使用說明：`MOE-mini-usage.pdf`
+
+遊戲只重製解釋欄中以引號標示、每字附有注音且剛好四個中文字的例詞及其音讀，不修改原始內容。`moe-mini-phrases.js` 是供程式搜尋的格式轉換結果。

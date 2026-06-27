@@ -1,5 +1,6 @@
 import { MOE_IDIOM_ROWS } from "./moe-idioms.js";
 import { MOE_PHRASE_ROWS } from "./moe-phrases.js";
+import { MOE_MINI_PHRASE_ROWS } from "./moe-mini-phrases.js";
 
 const CORE_IDIOMS = [
   { text: "一心一意", sounds: "yi4 xin1 yi2 yi4" },
@@ -205,12 +206,10 @@ function toToneKey(syllable) {
 
 function fromMoeRow([text, pinyin], kind, source) {
   const sounds = pinyin
-    .split("（")[0]
-    .trim()
-    .split(/\s+/)
-    .map(toToneKey)
-    .filter(Boolean);
-  return sounds.length === 4 ? { text, sounds, kind, source } : null;
+    .split(/（[^）]+）/)
+    .map((variant) => variant.trim().split(/\s+/).map(toToneKey).filter(Boolean))
+    .find((variant) => variant.length === 4);
+  return sounds ? { text, sounds, kind, source } : null;
 }
 
 const idiomsByText = new Map();
@@ -225,6 +224,9 @@ for (const row of MOE_PHRASE_ROWS) {
   if (idiomsByText.has(row[0])) continue;
   const phrase = fromMoeRow(row, "phrase", row[2]);
   if (phrase) idiomsByText.set(phrase.text, phrase);
+}
+for (const [text, sounds] of MOE_MINI_PHRASE_ROWS) {
+  if (!idiomsByText.has(text)) idiomsByText.set(text, { text, sounds, kind: "phrase", source: "mini" });
 }
 
 const manualPhrases = [

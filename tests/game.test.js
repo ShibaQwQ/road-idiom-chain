@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { IDIOMS, STARTERS, STARTER_GROUPS, chooseRandomStarter } from "../idioms.js";
+import { MOE_IDIOM_ROWS } from "../moe-idioms.js";
+import { MOE_MINI_PHRASE_ROWS } from "../moe-mini-phrases.js";
 import { chooseAiReply, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
 
 const idiom = (text) => IDIOMS.find((item) => item.text === text);
@@ -27,9 +29,33 @@ test("語音答案可移除引導詞與標點", () => {
 });
 
 test("完整成語庫包含指定條目與正確讀音", () => {
-  assert.ok(IDIOMS.length > 37000);
+  assert.equal(IDIOMS.length, 39788);
   assert.deepEqual(idiom("美輪美奐").sounds, ["mei3", "lun2", "mei3", "huan4"]);
   assert.deepEqual(idiom("美不勝收").sounds, ["mei3", "bu4", "sheng1", "shou1"]);
+});
+
+test("國語小字典補充兒童常用四字例詞，仍依一般四字詞計一分", () => {
+  assert.equal(MOE_MINI_PHRASE_ROWS.length, 5088);
+  assert.equal(new Set(MOE_MINI_PHRASE_ROWS.map(([text]) => text)).size, 5088);
+  assert.ok(MOE_MINI_PHRASE_ROWS.every(([text, sounds]) => text.length === 4 && sounds.length === 4 && sounds.every(Boolean)));
+  for (const text of ["漂洋過海", "雀躍不已", "年過半百", "萬眾歸心"]) {
+    assert.equal(idiom(text)?.source, "mini", `${text} 應由國語小字典補入`);
+  }
+  const phrase = idiom("漂洋過海");
+  const previous = { text: "水漂", sounds: ["shui3", phrase.sounds[0]], kind: "idiom" };
+  assert.equal(scoreAnswer(previous, phrase, "score").points, 1);
+  assert.equal(findIdiom("太油膩一"), undefined);
+});
+
+test("成語典全部條目皆分類為成語，字首同字固定得三分", () => {
+  const byText = new Map(IDIOMS.map((entry) => [entry.text, entry]));
+  for (const [text] of MOE_IDIOM_ROWS) {
+    const entry = byText.get(text);
+    assert.equal(entry?.kind, "idiom", `${text} 應分類為成語`);
+    const previous = { text: `接${text[0]}`, sounds: ["jie1", entry.sounds[0]], kind: "idiom" };
+    assert.equal(scoreAnswer(previous, entry, "score").points, 3, `${text} 字首同字應得三分`);
+  }
+  assert.equal(byText.get("難兄難弟")?.kind, "idiom");
 });
 
 test("教育部一般辭典補充四字詞，位置積分最高一分", () => {
@@ -97,6 +123,8 @@ test("PWA 圖示與離線快取設定完整，連線檢查檔不進快取", asyn
   assert.match(serviceWorker, /icons\/apple-touch-icon\.png/);
   assert.match(serviceWorker, /moe-idioms\.js/);
   assert.match(serviceWorker, /moe-phrases\.js/);
+  assert.match(serviceWorker, /moe-mini-phrases\.js/);
+  await access(new URL("../licenses/MOE-mini-usage.pdf", import.meta.url));
   assert.match(serviceWorker, /fetch\(event\.request\)[\s\S]*?\.catch/);
   assert.doesNotMatch(serviceWorker.match(/APP_FILES = \[[\s\S]*?\];/)?.[0] ?? "", /online-check\.txt/);
 });
