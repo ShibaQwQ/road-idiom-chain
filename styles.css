@@ -60,6 +60,8 @@ button:focus-visible, input:focus-visible, summary:focus-visible {
 h1 { margin: 0; font-family: "Songti TC", "Noto Serif TC", serif; font-size: clamp(42px, 12vw, 72px); font-weight: 800; line-height: 1.05; letter-spacing: -.05em; }
 h1 em { color: var(--lane); font-style: normal; }
 .intro > p:last-child { max-width: 32rem; margin: 20px 0 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
+.intro > p.data-credit { margin-top: 14px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.data-credit a { margin: 0 3px; color: var(--signal); }
 
 .setup-form { display: grid; gap: 28px; }
 fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }

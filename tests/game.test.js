@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { IDIOMS } from "../idioms.js";
-import { chooseAiReply, createPlayers, findIdiom, normalizeSpeech, scoreAnswer } from "../game.js";
+import { chooseAiReply, createPlayers, findIdiom, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
 
 const idiom = (text) => IDIOMS.find((item) => item.text === text);
 
@@ -24,6 +24,19 @@ test("同字與同音模式使用不同驗證規則", () => {
 test("語音答案可移除引導詞與標點", () => {
   assert.equal(normalizeSpeech("答案是，馬到成功。"), "馬到成功");
   assert.equal(findIdiom("我接：馬到成功")?.text, "馬到成功");
+});
+
+test("完整成語庫包含指定條目與正確讀音", () => {
+  assert.ok(IDIOMS.length > 5000);
+  assert.deepEqual(idiom("美輪美奐").sounds, ["mei3", "lun2", "mei3", "huan4"]);
+  assert.deepEqual(idiom("美不勝收").sounds, ["mei3", "bu4", "sheng1", "shou1"]);
+});
+
+test("多人放棄必須二次確認，也可以取消", () => {
+  assert.equal(isSkipRequest("放棄"), true);
+  assert.equal(getSkipConfirmation(["旁邊有人說話"]), null);
+  assert.equal(getSkipConfirmation(["確定"]), "confirm");
+  assert.equal(getSkipConfirmation(["取消"]), "cancel");
 });
 
 test("三種 AI 難度都只會選未使用且符合規則的成語", () => {
@@ -53,5 +66,6 @@ test("PWA 圖示與離線快取設定完整，連線檢查檔不進快取", asyn
     access(new URL("../icons/apple-touch-icon.png", import.meta.url))
   ]);
   assert.match(serviceWorker, /icons\/apple-touch-icon\.png/);
+  assert.match(serviceWorker, /moe-idioms\.js/);
   assert.doesNotMatch(serviceWorker.match(/APP_FILES = \[[\s\S]*?\];/)?.[0] ?? "", /online-check\.txt/);
 });

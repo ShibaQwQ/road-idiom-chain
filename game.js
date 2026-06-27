@@ -10,6 +10,17 @@ export function normalizeSpeech(value) {
   return value.replace(/[，。！？、,.!?\s]/g, "").replace(/^(我接|答案是|成語是)/, "");
 }
 
+export function isSkipRequest(value) {
+  return /^(放棄|放弃)$/.test(normalizeSpeech(value));
+}
+
+export function getSkipConfirmation(values) {
+  const normalized = values.map(normalizeSpeech);
+  if (normalized.some((value) => /^(確定|确定|確認|确认|是|是的)$/.test(value))) return "confirm";
+  if (normalized.some((value) => /^(取消|不要|繼續|继续)$/.test(value))) return "cancel";
+  return null;
+}
+
 export function findIdiom(value, idioms = IDIOMS) {
   const normalized = normalizeSpeech(value);
   return idioms.find((idiom) => idiom.text === normalized)
@@ -57,9 +68,12 @@ export function chooseAiReply(previous, rule, difficulty, used, idioms = IDIOMS,
   const candidates = availableReplies(previous, rule, used, idioms);
   if (!candidates.length) return null;
 
-  const ranked = candidates.map((idiom) => ({
+  const scoredCandidates = candidates.map((idiom) => ({ idiom, points: scoreAnswer(previous, idiom, rule).points }));
+  const positiveCandidates = scoredCandidates.filter((item) => item.points > 0);
+  const strategicCandidates = positiveCandidates.length ? positiveCandidates : scoredCandidates;
+  const ranked = strategicCandidates.map(({ idiom, points }) => ({
     idiom,
-    points: scoreAnswer(previous, idiom, rule).points,
+    points,
     exits: replyCount(idiom, rule, used, idioms)
   }));
 

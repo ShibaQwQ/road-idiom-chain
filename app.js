@@ -1,5 +1,5 @@
 import { IDIOMS, STARTERS } from "./idioms.js";
-import { RULES, chooseAiReply, createPlayers, findIdiom, scoreAnswer } from "./game.js";
+import { RULES, chooseAiReply, createPlayers, findIdiom, getSkipConfirmation, isSkipRequest, scoreAnswer } from "./game.js";
 
 const $ = (selector) => document.querySelector(selector);
 const elements = {
@@ -38,7 +38,8 @@ const state = {
   recognition: null,
   listening: false,
   gameActive: false,
-  online: null
+  online: null,
+  pendingSkipConfirmation: false
 };
 
 function currentPlayer() {
@@ -103,11 +104,22 @@ function setupRecognition() {
     state.listening = true;
     elements.voiceZone.classList.add("listening");
     elements.listenLabel.textContent = "正在聽";
-    setStatus("請說出四字成語");
+    setStatus(state.pendingSkipConfirmation ? "請說確定或取消" : "請說出四字成語");
   });
 
   recognition.addEventListener("result", (event) => {
     const alternatives = Array.from(event.results[0], (result) => result.transcript);
+    if (state.pendingSkipConfirmation) {
+      handleSkipConfirmation(alternatives);
+      return;
+    }
+
+    const skipRequest = alternatives.find(isSkipRequest);
+    if (skipRequest && state.config.mode === "multi") {
+      requestSkipTurn();
+      return;
+    }
+
     const command = alternatives.find((value) => /再說一次|重複題目|結束遊戲|提示/.test(value));
     if (command) {
       handleVoiceCommand(command);
@@ -198,6 +210,41 @@ function handleVoiceCommand(command) {
     return;
   }
   promptCurrentPlayer(true);
+}
+
+function requestSkipTurn() {
+  state.pendingSkipConfirmation = true;
+  const message = `${currentPlayer().name}，確定要放棄嗎？請說確定或取消`;
+  setStatus(message);
+  speak(message, startListening);
+}
+
+function handleSkipConfirmation(alternatives) {
+  const confirmation = getSkipConfirmation(alternatives);
+  if (confirmation === "confirm") {
+    confirmSkipTurn();
+    return;
+  }
+  if (confirmation === "cancel") {
+    state.pendingSkipConfirmation = false;
+    setStatus("已取消放棄，請繼續回答", "success");
+    speak("已取消放棄，請繼續回答", startListening);
+    return;
+  }
+  const message = "沒有確認放棄，請說確定或取消";
+  setStatus(message, "error");
+  speak(message, startListening);
+}
+
+function confirmSkipTurn() {
+  const player = currentPlayer();
+  state.pendingSkipConfirmation = false;
+  state.history.push({ text: "放棄", player: player.name, points: 0, reason: "放棄本回合" });
+  state.turnIndex = (state.turnIndex + 1) % state.players.length;
+  renderGame();
+  const report = `${player.name}放棄本回合，得到零分，換${currentPlayer().name}`;
+  setStatus(report);
+  speak(report, () => promptCurrentPlayer(true));
 }
 
 function rejectAnswer(message) {
@@ -299,6 +346,7 @@ function startGame(event) {
   state.used = new Set();
   state.history = [];
   state.gameActive = true;
+  state.pendingSkipConfirmation = false;
 
   const starterText = STARTERS[Math.floor(Math.random() * STARTERS.length)];
   state.current = IDIOMS.find((idiom) => idiom.text === starterText);
@@ -314,6 +362,7 @@ function startGame(event) {
 function finishGame(reason = "本局結束") {
   if (!state.gameActive) return;
   state.gameActive = false;
+  state.pendingSkipConfirmation = false;
   stopListening();
   window.speechSynthesis?.cancel();
   const highest = Math.max(...state.players.map((player) => player.score));
@@ -333,6 +382,7 @@ function finishGame(reason = "本局結束") {
 
 function returnToSetup() {
   state.gameActive = false;
+  state.pendingSkipConfirmation = false;
   stopListening();
   window.speechSynthesis?.cancel();
   if (elements.resultDialog.open) elements.resultDialog.close();
@@ -347,7 +397,13 @@ elements.manualForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const value = elements.manualInput.value;
   elements.manualInput.value = "";
-  submitAnswer(value);
+  if (state.pendingSkipConfirmation) {
+    handleSkipConfirmation([value]);
+  } else if (state.config.mode === "multi" && isSkipRequest(value)) {
+    requestSkipTurn();
+  } else {
+    submitAnswer(value);
+  }
 });
 elements.endGame.addEventListener("click", () => finishGame());
 elements.playAgain.addEventListener("click", returnToSetup);

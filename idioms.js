@@ -1,4 +1,6 @@
-export const IDIOMS = [
+import { MOE_IDIOM_ROWS } from "./moe-idioms.js";
+
+const CORE_IDIOMS = [
   { text: "一心一意", sounds: "yi4 xin1 yi2 yi4" },
   { text: "意氣風發", sounds: "yi4 qi4 feng1 fa1" },
   { text: "義正詞嚴", sounds: "yi4 zheng4 ci2 yan2" },
@@ -177,5 +179,48 @@ export const IDIOMS = [
   { text: "生龍活虎", sounds: "sheng1 long2 huo2 hu3" },
   { text: "聲東擊西", sounds: "sheng1 dong1 ji1 xi1" }
 ].map((idiom) => ({ ...idiom, sounds: idiom.sounds.split(" ") }));
+
+const TONE_MARKS = new Map([
+  ["\u0304", 1],
+  ["\u0301", 2],
+  ["\u030c", 3],
+  ["\u0300", 4]
+]);
+
+function toToneKey(syllable) {
+  let base = "";
+  let tone = 5;
+  for (const character of syllable.toLowerCase().normalize("NFD")) {
+    if (TONE_MARKS.has(character)) {
+      tone = TONE_MARKS.get(character);
+    } else if (character === "\u0308" && base.endsWith("u")) {
+      base = `${base.slice(0, -1)}v`;
+    } else if (/^[a-z]$/.test(character)) {
+      base += character;
+    }
+  }
+  return base ? `${base}${tone}` : null;
+}
+
+function fromMoeRow([text, pinyin]) {
+  const sounds = pinyin
+    .split("（")[0]
+    .trim()
+    .split(/\s+/)
+    .map(toToneKey)
+    .filter(Boolean);
+  return sounds.length === 4 ? { text, sounds } : null;
+}
+
+const idiomsByText = new Map();
+for (const row of MOE_IDIOM_ROWS) {
+  const idiom = fromMoeRow(row);
+  if (idiom) idiomsByText.set(idiom.text, idiom);
+}
+for (const idiom of CORE_IDIOMS) {
+  if (!idiomsByText.has(idiom.text)) idiomsByText.set(idiom.text, idiom);
+}
+
+export const IDIOMS = [...idiomsByText.values()];
 
 export const STARTERS = ["一心一意", "人山人海", "馬到成功", "千言萬語", "道聽塗說"];
