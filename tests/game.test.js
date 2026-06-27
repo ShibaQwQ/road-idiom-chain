@@ -67,5 +67,6 @@ test("PWA 圖示與離線快取設定完整，連線檢查檔不進快取", asyn
   ]);
   assert.match(serviceWorker, /icons\/apple-touch-icon\.png/);
   assert.match(serviceWorker, /moe-idioms\.js/);
+  assert.match(serviceWorker, /fetch\(event\.request\)[\s\S]*?\.catch/);
   assert.doesNotMatch(serviceWorker.match(/APP_FILES = \[[\s\S]*?\];/)?.[0] ?? "", /online-check\.txt/);
 });

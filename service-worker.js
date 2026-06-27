@@ -1,4 +1,4 @@
-const CACHE_NAME = "road-idiom-chain-v4";
+const CACHE_NAME = "road-idiom-chain-v5";
 const APP_FILES = [
   "./",
   "./index.html",
@@ -34,12 +34,19 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) =>
-      cached || fetch(event.request).then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+    fetch(event.request)
+      .then((response) => {
+        if (url.origin === self.location.origin && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
-    )
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === "navigate") return caches.match("./index.html");
+        throw new Error("Offline resource unavailable");
+      })
   );
 });
