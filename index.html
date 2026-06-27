@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#09151f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="路上接龍" />
+    <title>路上接龍</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="回到遊戲設定">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+          <span>路上接龍</span>
+        </a>
+        <span id="networkBadge" class="status-badge" role="status">檢查連線</span>
+      </header>
+
+      <section id="setupScreen" class="screen setup-screen">
+        <div class="intro">
+          <p class="eyebrow">乘客限定 · 說出答案就能玩</p>
+          <h1>眼睛看風景，<br /><em>成語交給耳朵。</em></h1>
+          <p>選好玩法後按一次開始。系統會念題目、聽答案、報分數。</p>
+        </div>
+
+        <form id="setupForm" class="setup-form">
+          <fieldset>
+            <legend>誰要玩？</legend>
+            <div class="segmented">
+              <label><input type="radio" name="playMode" value="solo" checked /><span>我和 AI</span></label>
+              <label><input type="radio" name="playMode" value="multi" /><span>多人輪流</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>接龍規則</legend>
+            <div class="choice-stack">
+              <label class="rule-choice">
+                <input type="radio" name="rule" value="exact" checked />
+                <span><strong>同字接龍</strong><small>同一字接在字首</small></span>
+              </label>
+              <label class="rule-choice">
+                <input type="radio" name="rule" value="sound" />
+                <span><strong>同音也可以</strong><small>同音同調即可接龍</small></span>
+              </label>
+              <label class="rule-choice">
+                <input type="radio" name="rule" value="score" />
+                <span><strong>位置積分賽</strong><small>字首 3／2 分，其他位置 1 分</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset id="difficultyField">
+            <legend>AI 強度</legend>
+            <div class="segmented three">
+              <label><input type="radio" name="difficulty" value="easy" /><span>輕鬆</span></label>
+              <label><input type="radio" name="difficulty" value="normal" checked /><span>標準</span></label>
+              <label><input type="radio" name="difficulty" value="hard" /><span>挑戰</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset id="playerCountField" hidden>
+            <legend>乘客人數</legend>
+            <div class="stepper">
+              <button type="button" id="decreasePlayers" aria-label="減少玩家">−</button>
+              <output id="playerCount">2</output>
+              <button type="button" id="increasePlayers" aria-label="增加玩家">＋</button>
+            </div>
+          </fieldset>
+
+          <button class="primary-action" type="submit">啟動語音遊戲</button>
+          <p class="safety-note">請由乘客操作，駕駛不要使用。</p>
+        </form>
+      </section>
+
+      <section id="gameScreen" class="screen game-screen" hidden>
+        <div class="game-meta">
+          <div><span>輪到</span><strong id="turnName">玩家</strong></div>
+          <button id="endGame" class="text-button" type="button">結束</button>
+        </div>
+
+        <div id="scoreboard" class="scoreboard" aria-label="目前分數"></div>
+
+        <section class="road-sign" aria-labelledby="targetLabel">
+          <p id="targetLabel">請接這個字</p>
+          <strong id="targetCharacter">意</strong>
+          <p id="targetSound">同音模式：ㄧˋ</p>
+        </section>
+
+        <div class="voice-zone">
+          <div id="voicePulse" class="voice-pulse" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <button id="listenButton" class="listen-button" type="button">
+            <span class="mic-icon" aria-hidden="true"></span>
+            <span id="listenLabel">說出成語</span>
+          </button>
+          <p id="gameStatus" class="game-status" role="status" aria-live="polite">準備開始</p>
+        </div>
+
+        <form id="manualForm" class="manual-form">
+          <label for="manualInput">語音沒聽清楚？也可以輸入</label>
+          <div><input id="manualInput" inputmode="text" autocomplete="off" maxlength="12" placeholder="輸入四字成語" /><button type="submit">送出</button></div>
+        </form>
+
+        <details class="history-panel">
+          <summary>查看接龍紀錄</summary>
+          <ol id="historyList"></ol>
+        </details>
+      </section>
+    </main>
+
+    <dialog id="resultDialog">
+      <div class="dialog-content">
+        <p class="eyebrow">本局結束</p>
+        <h2 id="resultTitle">完成一趟接龍</h2>
+        <div id="finalScores" class="final-scores"></div>
+        <button id="playAgain" class="primary-action" type="button">再玩一局</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
