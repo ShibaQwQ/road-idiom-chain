@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
-import { IDIOMS, STARTERS } from "../idioms.js";
-import { chooseAiReply, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
+import { IDIOMS, STARTERS, STARTER_GROUPS, chooseRandomStarter } from "../idioms.js";
+import { chooseAiReply, createFreePhrase, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, normalizeSpeech, scoreAnswer } from "../game.js";
 
 const idiom = (text) => IDIOMS.find((item) => item.text === text);
 
@@ -39,6 +39,15 @@ test("教育部一般辭典補充四字詞，位置積分最高一分", () => {
   assert.equal(scoreAnswer(idiom("道聽塗說"), idiom("說文解字"), "score").points, 1);
 });
 
+test("詞庫外的任意四個中文字也能接龍且最高一分", () => {
+  const freePhrase = createFreePhrase("說話真好");
+  assert.equal(freePhrase.text, "說話真好");
+  assert.equal(freePhrase.source, "free");
+  assert.equal(scoreAnswer(idiom("道聽塗說"), freePhrase, "score").points, 1);
+  assert.equal(scoreAnswer(idiom("道聽塗說"), freePhrase, "exact").valid, true);
+  assert.equal(createFreePhrase("三個字"), null);
+});
+
 test("語音同音錯字能找到正確四字詞候選", () => {
   assert.ok(findPhoneticMatches("十指大動").some((item) => item.text === "食指大動"));
   assert.ok(findPhoneticMatches("供體時艱").some((item) => item.text === "共體時艱"));
@@ -48,7 +57,9 @@ test("語音同音錯字能找到正確四字詞候選", () => {
 
 test("隨機開局候選不再固定為少數幾個詞", () => {
   assert.ok(STARTERS.length > 1000);
-  assert.ok(new Set(STARTERS.map((text) => text.at(-1))).size > 100);
+  assert.ok(STARTER_GROUPS.length > 100);
+  assert.equal(new Set(STARTER_GROUPS.map((group) => group[0].at(-1))).size, STARTER_GROUPS.length);
+  assert.ok(chooseRandomStarter(() => 0));
 });
 
 test("多人放棄必須二次確認，也可以取消", () => {

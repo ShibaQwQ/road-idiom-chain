@@ -1,5 +1,5 @@
-import { IDIOMS, STARTERS } from "./idioms.js";
-import { RULES, chooseAiReply, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, scoreAnswer } from "./game.js";
+import { IDIOMS, chooseRandomStarter } from "./idioms.js";
+import { RULES, chooseAiReply, createFreePhrase, createPlayers, findIdiom, findPhoneticMatches, getAnswerConfirmation, getSkipConfirmation, isSkipRequest, scoreAnswer } from "./game.js";
 
 const $ = (selector) => document.querySelector(selector);
 const elements = {
@@ -112,8 +112,8 @@ function setupRecognition() {
       : state.pendingAnswerCandidates.length
         ? "請說確定或不是"
         : state.awaitingOpening
-          ? "請說一個成語或四字詞語開局"
-          : "請說出四字成語或詞語";
+          ? "請說四個中文字開局"
+          : "請說四個中文字";
     setStatus(instruction);
   });
 
@@ -202,13 +202,13 @@ function speak(message, onEnd) {
 function promptCurrentPlayer(autoListen = true) {
   const player = currentPlayer();
   if (state.awaitingOpening) {
-    const message = `${player.name}，請隨意說一個成語或四字詞語開局，第一題不計分`;
+    const message = `${player.name}，請隨意說四個中文字開局，第一題不計分`;
     setStatus(message);
     speak(message, () => autoListen && startListening());
     return;
   }
   const target = state.current.text.at(-1);
-  const instruction = state.config.rule === "exact" ? `請用「${target}」字開頭` : state.config.rule === "sound" ? `請用「${target}」或同音字開頭` : `請找含有「${target}」或同音字的成語`;
+  const instruction = state.config.rule === "exact" ? `請用「${target}」字開頭` : state.config.rule === "sound" ? `請用「${target}」或同音字開頭` : `請說含有「${target}」或同音字的四字詞`;
   setStatus(`${player.name}，${instruction}`);
   speak(`${player.name}，${instruction}`, () => autoListen && startListening());
 }
@@ -233,7 +233,11 @@ function processAnswerAlternatives(alternatives) {
   const phoneticCandidates = getPlayableCandidates(alternatives.flatMap((value) => findPhoneticMatches(value)));
   if (phoneticCandidates.length === 1) submitAnswer(phoneticCandidates[0]);
   else if (phoneticCandidates.length > 1) requestAnswerConfirmation(phoneticCandidates);
-  else rejectAnswer(`聽到「${alternatives[0]}」，但詞庫裡找不到這個四字詞`);
+  else {
+    const freePhrase = alternatives.map(createFreePhrase).find(Boolean);
+    if (freePhrase) submitAnswer(freePhrase);
+    else rejectAnswer("請說剛好四個中文字");
+  }
 }
 
 function requestAnswerConfirmation(candidates) {
@@ -245,7 +249,7 @@ function askCurrentAnswerCandidate() {
   const candidate = state.pendingAnswerCandidates[0];
   if (!candidate) {
     state.pendingAnswerCandidates = [];
-    rejectAnswer("沒有找到符合發音的四字詞");
+    rejectAnswer("沒有找到符合發音的候選，請重新說四個字");
     return;
   }
   const message = `你說的是${candidate.text}嗎？請說確定或不是`;
@@ -333,9 +337,9 @@ function rejectAnswer(message) {
 function submitAnswer(value) {
   if (!state.gameActive || currentPlayer()?.ai) return;
   stopListening();
-  const idiom = typeof value === "string" ? findIdiom(value) : value;
+  const idiom = typeof value === "string" ? findIdiom(value) || createFreePhrase(value) : value;
   if (!idiom) {
-    rejectAnswer("詞庫裡找不到這個四字詞");
+    rejectAnswer("請說剛好四個中文字");
     return;
   }
   if (state.used.has(idiom.text)) {
@@ -365,7 +369,7 @@ function acceptAnswer(idiom, result) {
   state.turnIndex = (state.turnIndex + 1) % state.players.length;
   renderGame();
 
-  const answerType = idiom.kind === "phrase" ? "四字詞語" : "成語";
+  const answerType = idiom.kind === "idiom" ? "成語" : "四字詞語";
   const report = `${player.name}回答${answerType}${idiom.text}，${result.reason}，得到${result.points}分`;
   setStatus(report, result.points ? "success" : "");
   speak(report, () => {
@@ -453,7 +457,7 @@ function startGame(event) {
   if (state.awaitingOpening) {
     state.current = null;
   } else {
-    const starterText = STARTERS[Math.floor(Math.random() * STARTERS.length)];
+    const starterText = chooseRandomStarter();
     state.current = IDIOMS.find((idiom) => idiom.text === starterText);
     state.used.add(state.current.text);
     state.history.push({ text: state.current.text, player: "隨機起點", points: null, reason: "起點" });

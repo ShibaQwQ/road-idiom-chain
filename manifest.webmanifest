@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#09151f",
   "theme_color": "#09151f",
-  "description": "給車上乘客玩的語音成語接龍",
+  "description": "給車上乘客玩的語音四字文字接龍",
   "icons": [
     {
       "src": "icons/app-icon-192.png",

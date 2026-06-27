@@ -7,7 +7,12 @@ export const RULES = {
 };
 
 export function normalizeSpeech(value) {
-  return value.replace(/[，。！？、,.!?\s]/g, "").replace(/^(我接|答案是|成語是)/, "");
+  return value.replace(/[，。！？、：,.!?:\s]/g, "").replace(/^(我接|答案是|成語是|我說|我要接|我講)/, "");
+}
+
+function extractFourCharacters(value) {
+  const characters = normalizeSpeech(value).match(/[\u3400-\u9fff]/g) ?? [];
+  return characters.length === 4 ? characters.join("") : null;
 }
 
 export function isSkipRequest(value) {
@@ -30,8 +35,7 @@ export function getAnswerConfirmation(values) {
 
 export function findIdiom(value, idioms = IDIOMS) {
   const normalized = normalizeSpeech(value);
-  return idioms.find((idiom) => idiom.text === normalized)
-    || idioms.find((idiom) => normalized.includes(idiom.text));
+  return idioms.find((idiom) => idiom.text === normalized);
 }
 
 const characterSounds = new Map();
@@ -43,27 +47,53 @@ for (const idiom of IDIOMS) {
 }
 
 export function findPhoneticMatches(value, idioms = IDIOMS) {
-  const characters = normalizeSpeech(value).match(/[\u3400-\u9fff]/g) ?? [];
-  if (characters.length !== 4) return [];
+  const text = extractFourCharacters(value);
+  if (!text) return [];
+  const characters = [...text];
   const soundOptions = characters.map((character) => characterSounds.get(character) ?? new Set());
   const evaluated = idioms.map((idiom) => {
     const soundMismatches = idiom.sounds.reduce((count, sound, index) => count + (soundOptions[index].has(sound) ? 0 : 1), 0);
     const characterMatches = [...idiom.text].reduce((count, character, index) => count + (characters[index] === character ? 1 : 0), 0);
     return { idiom, soundMismatches, characterMatches };
   });
-  const exactSound = evaluated.filter((item) => item.soundMismatches === 0).map((item) => item.idiom);
+  const exactSound = evaluated
+    .filter((item) => item.soundMismatches === 0 && item.characterMatches >= 2)
+    .map((item) => item.idiom);
   if (exactSound.length) return exactSound;
   return evaluated
     .filter((item) => item.soundMismatches <= 1 && item.characterMatches >= 3)
     .map((item) => item.idiom);
 }
 
+export function createFreePhrase(value) {
+  const text = extractFourCharacters(value);
+  if (!text) return null;
+  const soundOptions = [...text].map((character) => [...(characterSounds.get(character) ?? [])]);
+  return {
+    text,
+    sounds: soundOptions.map((options) => options[0] ?? null),
+    soundOptions,
+    kind: "phrase",
+    source: "free"
+  };
+}
+
+function soundsAt(entry, index) {
+  const options = entry.soundOptions?.[index] ?? [];
+  const primary = entry.sounds?.[index];
+  return new Set(primary ? [...options, primary] : options);
+}
+
+function soundsMatch(first, firstIndex, second, secondIndex) {
+  const firstSounds = soundsAt(first, firstIndex);
+  return [...soundsAt(second, secondIndex)].some((sound) => firstSounds.has(sound));
+}
+
 export function scoreAnswer(previous, candidate, rule) {
   const targetIndex = previous.text.length - 1;
   const targetCharacter = previous.text[targetIndex];
-  const targetSound = previous.sounds[targetIndex];
   const firstCharacterMatches = candidate.text[0] === targetCharacter;
-  const firstSoundMatches = candidate.sounds[0] === targetSound;
+  const firstSoundMatches = soundsMatch(previous, targetIndex, candidate, 0);
 
   if (rule === "exact") {
     return { valid: firstCharacterMatches, points: firstCharacterMatches ? 1 : 0, reason: firstCharacterMatches ? "同字接龍" : "字首不同" };
@@ -75,7 +105,7 @@ export function scoreAnswer(previous, candidate, rule) {
   }
 
   if (candidate.kind === "phrase") {
-    const matched = [...candidate.text].some((character, index) => character === targetCharacter || candidate.sounds[index] === targetSound);
+    const matched = [...candidate.text].some((character, index) => character === targetCharacter || soundsMatch(previous, targetIndex, candidate, index));
     return { valid: true, points: matched ? 1 : 0, reason: matched ? "四字詞語接到目標字音" : "沒有接到目標音" };
   }
 
@@ -83,7 +113,7 @@ export function scoreAnswer(previous, candidate, rule) {
   if (firstSoundMatches) return { valid: true, points: 2, reason: "同音字在字首" };
 
   const laterMatch = [...candidate.text].some((character, index) =>
-    index > 0 && (character === targetCharacter || candidate.sounds[index] === targetSound)
+    index > 0 && (character === targetCharacter || soundsMatch(previous, targetIndex, candidate, index))
   );
   return { valid: true, points: laterMatch ? 1 : 0, reason: laterMatch ? "同字或同音字在其他位置" : "沒有接到目標音" };
 }

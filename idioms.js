@@ -242,6 +242,18 @@ for (const idiom of IDIOMS) {
   starterCounts.set(idiom.text[0], (starterCounts.get(idiom.text[0]) ?? 0) + 1);
 }
 
-export const STARTERS = IDIOMS
-  .filter((idiom) => idiom.kind === "idiom" && (starterCounts.get(idiom.text.at(-1)) ?? 0) >= 3)
-  .map((idiom) => idiom.text);
+const starterGroups = new Map();
+for (const idiom of IDIOMS) {
+  const target = idiom.text.at(-1);
+  if (idiom.kind !== "idiom" || (starterCounts.get(target) ?? 0) < 3) continue;
+  if (!starterGroups.has(target)) starterGroups.set(target, []);
+  starterGroups.get(target).push(idiom.text);
+}
+
+export const STARTER_GROUPS = [...starterGroups.values()];
+export const STARTERS = STARTER_GROUPS.flat();
+
+export function chooseRandomStarter(random = Math.random) {
+  const group = STARTER_GROUPS[Math.floor(random() * STARTER_GROUPS.length)];
+  return group[Math.floor(random() * group.length)];
+}
