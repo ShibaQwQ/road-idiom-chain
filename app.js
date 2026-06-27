@@ -38,6 +38,7 @@ const state = {
   history: [],
   recognition: null,
   listening: false,
+  resumeListeningAfterEnd: null,
   gameActive: false,
   online: null,
   pendingSkipConfirmation: false,
@@ -118,6 +119,7 @@ function setupRecognition() {
   });
 
   recognition.addEventListener("result", (event) => {
+    window.speechSynthesis?.cancel();
     const alternatives = Array.from(event.results[0], (result) => result.transcript);
     if (state.pendingSkipConfirmation) {
       handleSkipConfirmation(alternatives);
@@ -154,28 +156,43 @@ function setupRecognition() {
     setStatus(message, "error");
   });
 
+  recognition.addEventListener("speechstart", () => {
+    window.speechSynthesis?.cancel();
+  });
+
   recognition.addEventListener("end", () => {
     state.listening = false;
     elements.voiceZone.classList.remove("listening");
     elements.listenLabel.textContent = "說出答案";
+    const options = state.resumeListeningAfterEnd;
+    state.resumeListeningAfterEnd = null;
+    if (options && state.gameActive && !currentPlayer()?.ai) startListening(options);
   });
 
   state.recognition = recognition;
 }
 
-function startListening() {
+function startListening(options = {}) {
   if (!state.gameActive || currentPlayer()?.ai) return;
   if (!state.recognition) {
     setStatus("這個瀏覽器不支援語音辨識，請使用下方輸入", "error");
     return;
   }
-  if (state.listening) return;
-  window.speechSynthesis?.cancel();
+  if (state.listening) {
+    if (options.preserveSpeech) state.resumeListeningAfterEnd = options;
+    return;
+  }
+  if (!options.preserveSpeech) window.speechSynthesis?.cancel();
   try {
     state.recognition.start();
   } catch {
     setStatus("語音正在重新準備，請再按一次", "error");
   }
+}
+
+function speakAndListen(message) {
+  speak(message);
+  startListening({ preserveSpeech: true });
 }
 
 function stopListening() {
@@ -204,13 +221,15 @@ function promptCurrentPlayer(autoListen = true) {
   if (state.awaitingOpening) {
     const message = `${player.name}，請隨意說四個中文字開局，第一題不計分`;
     setStatus(message);
-    speak(message, () => autoListen && startListening());
+    if (autoListen) speakAndListen(message);
+    else speak(message);
     return;
   }
   const target = state.current.text.at(-1);
   const instruction = state.config.rule === "exact" ? `請用「${target}」字開頭` : state.config.rule === "sound" ? `請用「${target}」或同音字開頭` : `請說含有「${target}」或同音字的四字詞`;
   setStatus(`${player.name}，${instruction}`);
-  speak(`${player.name}，${instruction}`, () => autoListen && startListening());
+  if (autoListen) speakAndListen(`${player.name}，${instruction}`);
+  else speak(`${player.name}，${instruction}`);
 }
 
 function getPlayableCandidates(candidates) {
@@ -254,7 +273,7 @@ function askCurrentAnswerCandidate() {
   }
   const message = `你說的是${candidate.text}嗎？請說確定或不是`;
   setStatus(message);
-  speak(message, startListening);
+  speakAndListen(message);
 }
 
 function handleAnswerConfirmation(alternatives) {
@@ -270,11 +289,11 @@ function handleAnswerConfirmation(alternatives) {
     if (state.pendingAnswerCandidates.length) askCurrentAnswerCandidate();
     else {
       state.pendingAnswerCandidates = [];
-      speak("已取消這些候選，請重新回答", startListening);
+      speakAndListen("已取消這些候選，請重新回答");
     }
     return;
   }
-  speak("請說確定或不是", startListening);
+  speakAndListen("請說確定或不是");
 }
 
 function handleVoiceCommand(command) {
@@ -288,7 +307,7 @@ function handleVoiceCommand(command) {
       speak("這一題沒有提示，可以結束本局");
       return;
     }
-    speak(`提示，答案的第一個字是，${hint.text[0]}`, startListening);
+    speakAndListen(`提示，答案的第一個字是，${hint.text[0]}`);
     return;
   }
   promptCurrentPlayer(true);
@@ -298,7 +317,7 @@ function requestSkipTurn() {
   state.pendingSkipConfirmation = true;
   const message = `${currentPlayer().name}，確定要放棄嗎？請說確定或取消`;
   setStatus(message);
-  speak(message, startListening);
+  speakAndListen(message);
 }
 
 function handleSkipConfirmation(alternatives) {
@@ -310,12 +329,12 @@ function handleSkipConfirmation(alternatives) {
   if (confirmation === "cancel") {
     state.pendingSkipConfirmation = false;
     setStatus("已取消放棄，請繼續回答", "success");
-    speak("已取消放棄，請繼續回答", startListening);
+    speakAndListen("已取消放棄，請繼續回答");
     return;
   }
   const message = "沒有確認放棄，請說確定或取消";
   setStatus(message, "error");
-  speak(message, startListening);
+  speakAndListen(message);
 }
 
 function confirmSkipTurn() {
@@ -331,7 +350,7 @@ function confirmSkipTurn() {
 
 function rejectAnswer(message) {
   setStatus(message, "error");
-  speak(`${message}，請再試一次`, startListening);
+  speakAndListen(`${message}，請再試一次`);
 }
 
 function submitAnswer(value) {
@@ -372,10 +391,8 @@ function acceptAnswer(idiom, result) {
   const answerType = idiom.kind === "idiom" ? "成語" : "四字詞語";
   const report = `${player.name}回答${answerType}${idiom.text}，${result.reason}，得到${result.points}分`;
   setStatus(report, result.points ? "success" : "");
-  speak(report, () => {
-    if (currentPlayer().ai) runAiTurn();
-    else promptCurrentPlayer(true);
-  });
+  if (currentPlayer().ai) speak(report, runAiTurn);
+  else promptCurrentPlayer(true);
 }
 
 function acceptOpening(idiom) {
@@ -386,10 +403,8 @@ function acceptOpening(idiom) {
   state.history.push({ text: idiom.text, player: `${player.name}出題`, points: null, reason: "開局" });
   state.turnIndex = (state.turnIndex + 1) % state.players.length;
   renderGame();
-  speak(`${player.name}用${idiom.text}開局`, () => {
-    if (currentPlayer().ai) runAiTurn();
-    else promptCurrentPlayer(true);
-  });
+  if (currentPlayer().ai) speak(`${player.name}用${idiom.text}開局`, runAiTurn);
+  else promptCurrentPlayer(true);
 }
 
 function runAiTurn() {
@@ -450,6 +465,7 @@ function startGame(event) {
   state.used = new Set();
   state.history = [];
   state.gameActive = true;
+  state.resumeListeningAfterEnd = null;
   state.pendingSkipConfirmation = false;
   state.pendingAnswerCandidates = [];
   state.awaitingOpening = state.config.openingMode === "player";
@@ -472,6 +488,7 @@ function startGame(event) {
 function finishGame(reason = "本局結束") {
   if (!state.gameActive) return;
   state.gameActive = false;
+  state.resumeListeningAfterEnd = null;
   state.pendingSkipConfirmation = false;
   state.pendingAnswerCandidates = [];
   stopListening();
@@ -493,6 +510,7 @@ function finishGame(reason = "本局結束") {
 
 function returnToSetup() {
   state.gameActive = false;
+  state.resumeListeningAfterEnd = null;
   state.pendingSkipConfirmation = false;
   state.pendingAnswerCandidates = [];
   stopListening();
@@ -504,7 +522,7 @@ function returnToSetup() {
 
 elements.setupForm.addEventListener("change", updateSetupFields);
 elements.setupForm.addEventListener("submit", startGame);
-elements.listenButton.addEventListener("click", startListening);
+elements.listenButton.addEventListener("click", () => startListening());
 elements.manualForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const value = elements.manualInput.value;

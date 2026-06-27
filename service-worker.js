@@ -1,4 +1,4 @@
-const CACHE_NAME = "road-idiom-chain-v8";
+const CACHE_NAME = "road-idiom-chain-v9";
 const APP_FILES = [
   "./",
   "./index.html",

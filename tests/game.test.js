@@ -101,3 +101,10 @@ test("PWA 圖示與離線快取設定完整，連線檢查檔不進快取", asyn
   assert.match(serviceWorker, /fetch\(event\.request\)[\s\S]*?\.catch/);
   assert.doesNotMatch(serviceWorker.match(/APP_FILES = \[[\s\S]*?\];/)?.[0] ?? "", /online-check\.txt/);
 });
+
+test("語音提示允許玩家在朗讀結束前開始回答", async () => {
+  const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(app, /speechstart[\s\S]*speechSynthesis\?\.cancel/);
+  assert.match(app, /startListening\(\{ preserveSpeech: true \}\)/);
+  assert.match(app, /resumeListeningAfterEnd[\s\S]*startListening\(options\)/);
+});
