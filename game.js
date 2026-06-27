@@ -106,7 +106,7 @@ export function scoreAnswer(previous, candidate, rule) {
 
   if (candidate.kind === "phrase") {
     const matched = [...candidate.text].some((character, index) => character === targetCharacter || soundsMatch(previous, targetIndex, candidate, index));
-    return { valid: true, points: matched ? 1 : 0, reason: matched ? "四字詞語接到目標字音" : "沒有接到目標音" };
+    return { valid: matched, points: matched ? 1 : 0, reason: matched ? "四字詞語接到目標字音" : "沒有接到目標音" };
   }
 
   if (firstCharacterMatches) return { valid: true, points: 3, reason: "同字在字首" };
@@ -115,11 +115,11 @@ export function scoreAnswer(previous, candidate, rule) {
   const laterMatch = [...candidate.text].some((character, index) =>
     index > 0 && (character === targetCharacter || soundsMatch(previous, targetIndex, candidate, index))
   );
-  return { valid: true, points: laterMatch ? 1 : 0, reason: laterMatch ? "同字或同音字在其他位置" : "沒有接到目標音" };
+  return { valid: laterMatch, points: laterMatch ? 1 : 0, reason: laterMatch ? "同字或同音字在其他位置" : "沒有接到目標音" };
 }
 
 export function availableReplies(previous, rule, used, idioms = IDIOMS) {
-  return idioms.filter((idiom) => !used.has(idiom.text) && (rule === "score" || scoreAnswer(previous, idiom, rule).valid));
+  return idioms.filter((idiom) => !used.has(idiom.text) && scoreAnswer(previous, idiom, rule).valid);
 }
 
 function replyCount(candidate, rule, used, idioms) {

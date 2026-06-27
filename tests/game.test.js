@@ -6,12 +6,12 @@ import { chooseAiReply, createFreePhrase, createPlayers, findIdiom, findPhonetic
 
 const idiom = (text) => IDIOMS.find((item) => item.text === text);
 
-test("位置積分賽依字首、同音與其他位置計算 3／2／1／0 分", () => {
+test("位置積分賽依字首、同音與其他位置計算 3／2／1 分，拒絕無關答案", () => {
   const previous = idiom("一心一意");
   assert.deepEqual(scoreAnswer(previous, idiom("意氣風發"), "score").points, 3);
   assert.deepEqual(scoreAnswer(previous, idiom("義正詞嚴"), "score").points, 2);
   assert.deepEqual(scoreAnswer(previous, idiom("萬事如意"), "score").points, 1);
-  assert.deepEqual(scoreAnswer(previous, idiom("人山人海"), "score").points, 0);
+  assert.deepEqual(scoreAnswer(previous, idiom("人山人海"), "score"), { valid: false, points: 0, reason: "沒有接到目標音" });
 });
 
 test("同字與同音模式使用不同驗證規則", () => {
@@ -45,6 +45,7 @@ test("詞庫外的任意四個中文字也能接龍且最高一分", () => {
   assert.equal(freePhrase.source, "free");
   assert.equal(scoreAnswer(idiom("道聽塗說"), freePhrase, "score").points, 1);
   assert.equal(scoreAnswer(idiom("道聽塗說"), freePhrase, "exact").valid, true);
+  assert.equal(scoreAnswer(idiom("道聽塗說"), createFreePhrase("晴空萬里"), "score").valid, false);
   assert.equal(createFreePhrase("三個字"), null);
 });
 
@@ -78,6 +79,9 @@ test("三種 AI 難度都只會選未使用且符合規則的成語", () => {
     assert.equal(used.has(reply.text), false);
     assert.equal(scoreAnswer(previous, reply, "sound").valid, true);
   }
+  const scoreReply = chooseAiReply(previous, "score", "easy", used, [idiom("意氣風發"), idiom("人山人海")], () => 0);
+  assert.equal(scoreReply.text, "意氣風發");
+  assert.equal(scoreAnswer(previous, scoreReply, "score").valid, true);
 });
 
 test("單人建立玩家與 AI，多人依指定數量建立乘客", () => {

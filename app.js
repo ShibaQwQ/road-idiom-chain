@@ -373,7 +373,9 @@ function submitAnswer(value) {
 
   const result = scoreAnswer(state.current, idiom, state.config.rule);
   if (!result.valid) {
-    rejectAnswer(`${idiom.text}沒有接到目標字`);
+    const target = state.current.text.at(-1);
+    const message = state.config.rule === "exact" ? `${idiom.text}沒有用「${target}」開頭` : `${idiom.text}沒有接到「${target}」或同音字`;
+    rejectAnswer(message);
     return;
   }
   acceptAnswer(idiom, result);
